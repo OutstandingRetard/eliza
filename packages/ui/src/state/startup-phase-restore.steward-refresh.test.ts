@@ -12,7 +12,7 @@ import { applyRestoredConnection } from "./startup-phase-restore";
 const STEWARD_TOKEN_KEY = "steward_session_token";
 const STEWARD_REFRESH_PATH = "/api/auth/steward-refresh";
 const CLOUD_AGENT_ID = "11111111-1111-4111-8111-111111111111";
-const CLOUD_AGENT_API_BASE = `https://api.elizacloud.ai/api/v1/eliza/agents/${CLOUD_AGENT_ID}`;
+const CLOUD_AGENT_API_BASE = `https://api.eliza.app/api/v1/eliza/agents/${CLOUD_AGENT_ID}`;
 
 /** Build a minimal (unsigned) JWT whose payload carries the given `exp`. */
 function makeJwt(expSecondsFromNow: number | null): string {

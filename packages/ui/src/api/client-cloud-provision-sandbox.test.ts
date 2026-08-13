@@ -23,7 +23,7 @@ import { ElizaClient } from "./client-base";
 // Side-effect import: patches provisionCloudSandbox onto the prototype.
 import "./client-cloud";
 
-const CLOUD_API_BASE = "https://api.elizacloud.ai";
+const CLOUD_API_BASE = "https://api.eliza.app";
 
 function jsonResponse(status: number, body: unknown) {
   return {
@@ -64,8 +64,8 @@ describe("provisionCloudSandbox", () => {
         "/provision": () =>
           jsonResponse(200, {
             data: {
-              bridgeUrl: "https://agent-1.elizacloud.ai/rpc",
-              webUiUrl: "https://agent-1.elizacloud.ai",
+              bridgeUrl: "https://agent-1.cloud.eliza.app/rpc",
+              webUiUrl: "https://agent-1.cloud.eliza.app",
               executionTier: "dedicated",
             },
           }),
@@ -80,9 +80,9 @@ describe("provisionCloudSandbox", () => {
       onProgress,
     });
     expect(result).toEqual({
-      bridgeUrl: "https://agent-1.elizacloud.ai/rpc",
+      bridgeUrl: "https://agent-1.cloud.eliza.app/rpc",
       agentId: "agent-1",
-      webUiUrl: "https://agent-1.elizacloud.ai",
+      webUiUrl: "https://agent-1.cloud.eliza.app",
       executionTier: "dedicated",
     });
     expect(onProgress).toHaveBeenCalledWith("ready", "Sandbox ready!");
@@ -177,7 +177,7 @@ describe("provisionCloudSandbox", () => {
     });
     expect(result.executionTier).toBe("shared");
     expect(result.webUiUrl).toBe(
-      "https://api.elizacloud.ai/api/v1/eliza/agents/agent-1",
+      "https://api.eliza.app/api/v1/eliza/agents/agent-1",
     );
   });
 });
