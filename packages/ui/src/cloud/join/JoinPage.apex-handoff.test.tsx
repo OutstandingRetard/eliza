@@ -49,7 +49,7 @@ describe("JoinPage apex app handoff", () => {
     render(<JoinPage />);
 
     await waitFor(() => {
-      expect(replacedUrls).toEqual(["https://app.elizacloud.ai/"]);
+      expect(replacedUrls).toEqual(["https://cloud.eliza.app/"]);
     });
     expect(window.location.hostname).toBe("elizacloud.ai");
     expect(runJoinFlowMock).not.toHaveBeenCalled();
