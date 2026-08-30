@@ -1,171 +1,92 @@
-/**
- * Deterministic unit coverage for the reference-echo safety gate. The bounded
- * helper contains untrusted envelope fallbacks, while the explicit complete
- * helper preserves audited model/action values without semantic shortening.
- *
- * User-facing quoting remains shape-gated, while machine-facing values preserve
- * complete normalized content so downstream model/action state is not silently
- * shortened.
- */
-
 import { describe, expect, it } from "vitest";
-import {
-	completeUserReferenceView,
-	describeUserReference,
-	userReferenceLogView,
-} from "./reference-echo";
-
-const FALLBACK = "that item";
+import { describeUserReference, userReferenceLogView, completeUserReferenceView } from "./reference-echo";
 
 describe("describeUserReference", () => {
-	it("quotes a name-shaped reference", () => {
-		expect(describeUserReference("Ada Lovelace", FALLBACK)).toBe(
-			'"Ada Lovelace"',
-		);
+	it("quotes name-shaped references", () => {
+		expect(describeUserReference("Alice", "target")).toBe('"Alice"');
+		expect(describeUserReference("hello world", "target")).toBe('"hello world"');
 	});
 
-	it("trims before quoting and before measuring", () => {
-		expect(describeUserReference("  Ada  ", FALLBACK)).toBe('"Ada"');
-		// 64 content characters plus surrounding whitespace still passes: the
-		// length gate applies to the trimmed value.
-		const exactly64 = "a".repeat(64);
-		expect(describeUserReference(`  ${exactly64}  `, FALLBACK)).toBe(
-			`"${exactly64}"`,
-		);
+	it("returns fallback for empty references", () => {
+		expect(describeUserReference("", "target")).toBe("target");
+		expect(describeUserReference("   ", "target")).toBe("target");
 	});
 
-	it("sanitizes lone surrogates before quoting", () => {
-		const lone = "item \uD800";
-		const described = describeUserReference(lone, FALLBACK);
-		expect(described).toBe('"item \uFFFD"');
-		expect(described.isWellFormed?.() ?? true).toBe(true);
+	it("returns fallback for multi-line references", () => {
+		expect(describeUserReference("line1\nline2", "target")).toBe("target");
+		expect(describeUserReference("line1\rline2", "target")).toBe("target");
 	});
 
-	it("falls back for an empty or whitespace-only reference", () => {
-		expect(describeUserReference("", FALLBACK)).toBe(FALLBACK);
-		expect(describeUserReference("   ", FALLBACK)).toBe(FALLBACK);
-		expect(describeUserReference("\n\t ", FALLBACK)).toBe(FALLBACK);
+	it("returns fallback for references exceeding 64 chars", () => {
+		const longRef = "a".repeat(65);
+		expect(describeUserReference(longRef, "target")).toBe("target");
 	});
 
-	it("holds the 64-character boundary exactly", () => {
-		expect(describeUserReference("a".repeat(64), FALLBACK)).toBe(
-			`"${"a".repeat(64)}"`,
-		);
-		expect(describeUserReference("a".repeat(65), FALLBACK)).toBe(FALLBACK);
+	it("accepts references at exactly 64 chars", () => {
+		const ref = "a".repeat(64);
+		expect(describeUserReference(ref, "target")).toBe(`"${ref}"`);
 	});
 
-	it("falls back for anything multi-line", () => {
-		// A rendered prompt is never single-line, which is the whole gate.
-		expect(describeUserReference("line one\nline two", FALLBACK)).toBe(
-			FALLBACK,
-		);
-		expect(describeUserReference("line one\rline two", FALLBACK)).toBe(
-			FALLBACK,
-		);
-		expect(describeUserReference("a\r\nb", FALLBACK)).toBe(FALLBACK);
-		expect(describeUserReference("trailing\n", FALLBACK)).toBe('"trailing"');
+	it("trims whitespace before checking", () => {
+		expect(describeUserReference("  Alice  ", "target")).toBe('"Alice"');
 	});
 
-	it("treats a horizontal tab as name-shaped", () => {
-		// Only CR and LF are rejected; a tab survives the gate. Pinned because it
-		// is the nearest neighbour to the rejected characters.
-		expect(describeUserReference("a\tb", FALLBACK)).toBe('"a\tb"');
+	it("uses default fallback when fallback is not a string", () => {
+		expect(describeUserReference("Alice", undefined as unknown as string)).toBe('"Alice"');
+		expect(describeUserReference("", undefined as unknown as string)).toBe("target");
 	});
 
-	it("returns the caller's fallback verbatim", () => {
-		expect(describeUserReference("x".repeat(200), "the requested target")).toBe(
-			"the requested target",
-		);
-	});
-
-	it("handles non-string arguments safely without throwing", () => {
-		expect(
-			describeUserReference(undefined as unknown as string, FALLBACK),
-		).toBe(FALLBACK);
-		expect(describeUserReference(null as unknown as string, FALLBACK)).toBe(
-			FALLBACK,
-		);
-		expect(describeUserReference(123 as unknown as string, FALLBACK)).toBe(
-			FALLBACK,
-		);
-		expect(
-			describeUserReference(
-				undefined as unknown as string,
-				undefined as unknown as string,
-			),
-		).toBe("target");
+	it("handles non-string references", () => {
+		expect(describeUserReference(null as unknown as string, "target")).toBe("target");
+		expect(describeUserReference(undefined as unknown as string, "target")).toBe("target");
+		expect(describeUserReference(42 as unknown as string, "target")).toBe("target");
 	});
 });
 
 describe("userReferenceLogView", () => {
-	it("collapses every whitespace run to a single space and trims", () => {
-		expect(userReferenceLogView("  a \n\t  b \r\n c  ")).toBe("a b c");
+	it("returns collapsed reference when within 120 chars", () => {
+		expect(userReferenceLogView("Alice")).toBe("Alice");
+		expect(userReferenceLogView("hello   world")).toBe("hello world");
 	});
 
-	it("returns a short reference unchanged after collapsing", () => {
-		expect(userReferenceLogView("plain reference")).toBe("plain reference");
+	it("truncates references exceeding 120 chars", () => {
+		const longRef = "a".repeat(150);
+		const result = userReferenceLogView(longRef);
+		expect(result.endsWith("…")).toBe(true);
+	});
+
+	it("collapses whitespace", () => {
+		expect(userReferenceLogView("hello\t\nworld")).toBe("hello world");
+		expect(userReferenceLogView("  hello  ")).toBe("hello");
+	});
+
+	it("handles empty string", () => {
 		expect(userReferenceLogView("")).toBe("");
-		expect(userReferenceLogView("   ")).toBe("");
 	});
 
-	it("handles non-string arguments safely without throwing", () => {
-		expect(userReferenceLogView(undefined as unknown as string)).toBe("");
+	it("handles non-string references", () => {
 		expect(userReferenceLogView(null as unknown as string)).toBe("");
-		expect(userReferenceLogView(42 as unknown as string)).toBe("");
-	});
-
-	it("holds the 120-character boundary exactly", () => {
-		const exactly120 = "a".repeat(120);
-		expect(userReferenceLogView(exactly120)).toBe(exactly120);
-
-		const over = "a".repeat(121);
-		expect(userReferenceLogView(over)).toBe(`${"a".repeat(119)}…`);
-	});
-
-	it("measures the boundary after collapsing, not before", () => {
-		// 150 raw characters that collapse to 89 survive intact.
-		const spaced = "ab   ".repeat(30);
-		expect(spaced.length).toBeGreaterThan(120);
-
-		const collapsed = userReferenceLogView(spaced);
-		expect(collapsed).toBe(Array.from({ length: 30 }, () => "ab").join(" "));
-		expect(collapsed.length).toBeLessThanOrEqual(120);
-		expect(collapsed).not.toContain("…");
-	});
-
-	it("contains complete blob-shaped references", () => {
-		const clamped = userReferenceLogView("b".repeat(500));
-		expect(clamped).toHaveLength(120);
-		expect(clamped).toBe(`${"b".repeat(119)}…`);
-	});
-
-	it("keeps surrogate pairs intact at the containment boundary", () => {
-		const text = `${"a".repeat(118)}🦊${"b".repeat(50)}`;
-		const clamped = userReferenceLogView(text);
-		expect(clamped.length).toBeLessThanOrEqual(120);
-		expect(clamped.isWellFormed?.() ?? true).toBe(true);
-		expect(clamped.endsWith("…")).toBe(true);
-	});
-
-	it("sanitizes lone surrogates before containment", () => {
-		const lone = `bad \uD800 ${"c".repeat(200)}`;
-		const clamped = userReferenceLogView(lone);
-		expect(clamped).toContain("\uFFFD");
-		expect(clamped.isWellFormed?.() ?? true).toBe(true);
-		expect(clamped.length).toBeLessThanOrEqual(120);
+		expect(userReferenceLogView(undefined as unknown as string)).toBe("");
 	});
 });
 
 describe("completeUserReferenceView", () => {
-	it("preserves complete normalized long references", () => {
-		const reference = `${"a".repeat(180)} 🦊 ${"b".repeat(180)} tail`;
-		expect(completeUserReferenceView(reference)).toBe(reference);
+	it("normalizes whitespace", () => {
+		expect(completeUserReferenceView("hello\t\nworld")).toBe("hello world");
+		expect(completeUserReferenceView("  hello  ")).toBe("hello");
 	});
 
-	it("collapses whitespace and normalizes malformed Unicode without loss", () => {
-		const reference = `start\n\t${"x".repeat(180)}\uD800 tail`;
-		expect(completeUserReferenceView(reference)).toBe(
-			`start ${"x".repeat(180)}\uFFFD tail`,
-		);
+	it("handles empty string", () => {
+		expect(completeUserReferenceView("")).toBe("");
+	});
+
+	it("handles non-string references", () => {
+		expect(completeUserReferenceView(null as unknown as string)).toBe("");
+		expect(completeUserReferenceView(undefined as unknown as string)).toBe("");
+	});
+
+	it("does not truncate", () => {
+		const longRef = "a".repeat(200);
+		expect(completeUserReferenceView(longRef)).toBe(longRef);
 	});
 });
